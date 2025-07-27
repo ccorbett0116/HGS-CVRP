@@ -7,17 +7,22 @@ Params::Params(
 	const std::vector<double>& x_coords,
 	const std::vector<double>& y_coords,
 	const std::vector<std::vector<double>>& dist_mtx,
+	const std::vector<std::vector<double>>& time_mtx,
 	const std::vector<double>& service_time,
 	const std::vector<double>& demands,
 	double vehicleCapacity,
 	double durationLimit,
+	const std::vector<double>& ready_time,
+	const std::vector<double>& due_time,
 	int nbVeh,
 	bool isDurationConstraint,
 	bool verbose,
 	const AlgorithmParameters& ap
 )
 	: ap(ap), isDurationConstraint(isDurationConstraint), nbVehicles(nbVeh), durationLimit(durationLimit),
-	  vehicleCapacity(vehicleCapacity), timeCost(dist_mtx), verbose(verbose)
+	  vehicleCapacity(vehicleCapacity), timeCost(dist_mtx), timeMatrix(time_mtx),
+	  readyTime(ready_time), dueTime(due_time), serviceTime(service_time),
+	  verbose(verbose)
 {
 	// This marks the starting time of the algorithm
 	startTime = clock();

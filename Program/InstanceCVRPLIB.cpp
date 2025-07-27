@@ -1,84 +1,122 @@
-//
+
 // Created by chkwon on 3/22/22.
-//
+// Rewritten to properly match VRPSPDTW dataset format.
 
 #include <fstream>
 #include <cmath>
 #include "InstanceCVRPLIB.h"
 
-InstanceCVRPLIB::InstanceCVRPLIB(std::string pathToInstance, bool isRoundingInteger = true)
+#include <iostream>
+#include <sstream>  // for std::getline and std::stringstream
+
+InstanceCVRPLIB::InstanceCVRPLIB(std::string pathToInstance, bool isRoundingInteger)
 {
-	std::string content, content2, content3;
-	double serviceTimeData = 0.;
-
-	// Read INPUT dataset
 	std::ifstream inputFile(pathToInstance);
-	if (inputFile.is_open())
-	{
-		getline(inputFile, content);
-		getline(inputFile, content);
-		getline(inputFile, content);
-		for (inputFile >> content ; content != "NODE_COORD_SECTION" ; inputFile >> content)
-		{
-			if (content == "DIMENSION") { inputFile >> content2 >> nbClients; nbClients--; } // Need to substract the depot from the number of nodes
-			else if (content == "EDGE_WEIGHT_TYPE")	inputFile >> content2 >> content3;
-			else if (content == "CAPACITY")	inputFile >> content2 >> vehicleCapacity;
-			else if (content == "DISTANCE") { inputFile >> content2 >> durationLimit; isDurationConstraint = true; }
-			else if (content == "SERVICE_TIME")	inputFile >> content2 >> serviceTimeData;
-			else throw std::string("Unexpected data in input file: " + content);
+	if (!inputFile.is_open())
+		throw std::string("Cannot open instance file: " + pathToInstance);
+
+	std::string line;
+	while (std::getline(inputFile, line)) {
+		if (line.empty()) continue;
+
+		if (line.rfind("NAME", 0) == 0) {
+			problemName = line.substr(line.find(":") + 1);
+			problemName.erase(0, problemName.find_first_not_of(" \t"));
 		}
-		if (nbClients <= 0) throw std::string("Number of nodes is undefined");
-		if (vehicleCapacity == 1.e30) throw std::string("Vehicle capacity is undefined");
-
-		x_coords = std::vector<double>(nbClients + 1);
-		y_coords = std::vector<double>(nbClients + 1);
-		demands = std::vector<double>(nbClients + 1);
-		service_time = std::vector<double>(nbClients + 1);
-
-		// Reading node coordinates
-		// depot must be the first element
-		// 		- i = 0 in the for-loop below, or
-		// 		- node_number = 1 in the .vrp file
-		// customers are
-		// 		- i = 1, 2, ..., nbClients in the for-loop below, or
-		// 		- node_number = 2, 3, ..., nb_Clients in the .vrp file
-		int node_number;
-		for (int i = 0; i <= nbClients; i++)
-		{
-			inputFile >> node_number >> x_coords[i] >> y_coords[i];
-			if (node_number != i + 1) throw std::string("The node numbering is not in order.");
+		else if (line.rfind("TYPE", 0) == 0) {
+			problemType = line.substr(line.find(":") + 1);
+			problemType.erase(0, problemType.find_first_not_of(" \t"));
 		}
-
-		// Reading demand information
-		inputFile >> content;
-		if (content != "DEMAND_SECTION") throw std::string("Unexpected data in input file: " + content);
-		for (int i = 0; i <= nbClients; i++)
-		{
-			inputFile >> content >> demands[i];
-			service_time[i] = (i == 0) ? 0. : serviceTimeData ;
+		else if (line.rfind("DIMENSION", 0) == 0) {
+			nbClients = std::stoi(line.substr(line.find(":") + 1)) - 1;
 		}
-
-		// Calculating 2D Euclidean Distance
-		dist_mtx = std::vector < std::vector< double > >(nbClients + 1, std::vector <double>(nbClients + 1));
-		for (int i = 0; i <= nbClients; i++)
-		{
-			for (int j = 0; j <= nbClients; j++)
-			{
-				dist_mtx[i][j] = std::sqrt(
-					(x_coords[i] - x_coords[j]) * (x_coords[i] - x_coords[j])
-					+ (y_coords[i] - y_coords[j]) * (y_coords[i] - y_coords[j])
-				);
-
-				if (isRoundingInteger) dist_mtx[i][j] = round(dist_mtx[i][j]);
+		else if (line.rfind("VEHICLES", 0) == 0) {
+			numVehicles = std::stoi(line.substr(line.find(":") + 1));
+		}
+		else if (line.rfind("DISPATCHINGCOST", 0) == 0) {
+			dispatchingCost = std::stod(line.substr(line.find(":") + 1));
+		}
+		else if (line.rfind("UNITCOST", 0) == 0) {
+			unitCost = std::stod(line.substr(line.find(":") + 1));
+		}
+		else if (line.rfind("CAPACITY", 0) == 0) {
+			vehicleCapacity = std::stod(line.substr(line.find(":") + 1));
+		}
+		else if (line.rfind("EDGE_WEIGHT_TYPE", 0) == 0) {
+			std::string type = line.substr(line.find(":") + 1);
+			type.erase(0, type.find_first_not_of(" \t"));
+			if (type != "EXPLICIT") {
+				throw std::runtime_error("Expected EDGE_WEIGHT_TYPE: EXPLICIT");
 			}
 		}
-
-		// Reading depot information (in all current instances the depot is represented as node 1, the program will return an error otherwise)
-		inputFile >> content >> content2 >> content3 >> content3;
-		if (content != "DEPOT_SECTION") throw std::string("Unexpected data in input file: " + content);
-		if (content2 != "1") throw std::string("Expected depot index 1 instead of " + content2);
-		if (content3 != "EOF") throw std::string("Unexpected data in input file: " + content3);
+		else if (line == "NODE_SECTION") {
+			break;
+		}
 	}
-	else
-		throw std::string("Impossible to open instance file: " + pathToInstance);
+
+	// Allocate storage (x/y omitted — not part of format)
+	demands.resize(nbClients + 1);
+	service_time.resize(nbClients + 1);
+	pickups.resize(nbClients + 1);
+	ready_time.resize(nbClients + 1);
+	due_time.resize(nbClients + 1);
+
+	// Parse NODE_SECTION lines: i,delivery,pickup,start,end,service
+	for (int i = 0; i <= nbClients; ++i) {
+		std::getline(inputFile, line);
+		std::stringstream ss(line);
+		std::string field;
+		int id;
+		double delivery, pickup, ready, due, service;
+
+		std::getline(ss, field, ','); id = std::stoi(field);
+		std::getline(ss, field, ','); delivery = std::stod(field);
+		std::getline(ss, field, ','); pickup   = std::stod(field);
+		std::getline(ss, field, ','); ready    = std::stod(field);
+		std::getline(ss, field, ','); due      = std::stod(field);
+		std::getline(ss, field, ','); service  = std::stod(field);
+
+		if (id != i) throw std::string("Node index mismatch at line: " + line);
+
+		demands[i] = delivery;
+		pickups[i] = pickup;
+		ready_time[i] = ready;
+		due_time[i] = due;
+		service_time[i] = service;
+	}
+
+	// Allocate distance/time matrices
+	dist_mtx.resize(nbClients + 1, std::vector<double>(nbClients + 1, 0.0));
+	time_mtx.resize(nbClients + 1, std::vector<double>(nbClients + 1, 0.0));
+
+	// Look for DISTANCETIME_SECTION
+	while (std::getline(inputFile, line)) {
+		if (line == "DISTANCETIME_SECTION")
+			break;
+	}
+
+	while (std::getline(inputFile, line)) {
+		if (line.empty()) continue;
+
+		std::stringstream ss(line);
+		std::string fromStr, toStr, distStr, timeStr;
+
+		if (!std::getline(ss, fromStr, ',')) continue;
+		if (!std::getline(ss, toStr, ',')) continue;
+		if (!std::getline(ss, distStr, ',')) continue;
+		if (!std::getline(ss, timeStr, ',')) continue;
+
+		try {
+			int from = std::stoi(fromStr);
+			int to = std::stoi(toStr);
+			double dist = std::stod(distStr);
+			double time = std::stod(timeStr);
+			dist_mtx[from][to] = dist;
+			time_mtx[from][to] = time;
+		}
+		catch (const std::invalid_argument& e) {
+			std::cerr << "Invalid line in DISTANCETIME_SECTION: " << line << "\n";
+			continue;
+		}
+	}
 }

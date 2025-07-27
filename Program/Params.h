@@ -81,19 +81,30 @@ public:
 	const std::vector< std::vector< double > >& timeCost;	// Distance matrix
 	std::vector< std::vector< int > > correlatedVertices;	// Neighborhood restrictions: For each client, list of nearby customers
 	bool areCoordinatesProvided;                            // Check if valid coordinates are provided
+	// VRPSPDTW Params
+	std::vector<double> readyTime;       // Earliest arrival times (lower bounds)
+	std::vector<double> dueTime;         // Latest arrival times (upper bounds)
+	std::vector<std::vector<double>> timeMatrix; // Travel times
+	std::vector<double> serviceTime;     // Service durations
+	double penaltyMultiplier = 1.0;      // Time warp penalty weight
 
 	// Initialization from a given data set
-	Params(const std::vector<double>& x_coords,
+	Params(
+		const std::vector<double>& x_coords,
 		const std::vector<double>& y_coords,
 		const std::vector<std::vector<double>>& dist_mtx,
+		const std::vector<std::vector<double>>& time_mtx,  // NEW: Time matrix
 		const std::vector<double>& service_time,
 		const std::vector<double>& demands,
 		double vehicleCapacity,
 		double durationLimit,
+		const std::vector<double>& ready_time,  // NEW: Lower bounds
+		const std::vector<double>& due_time,    // NEW: Upper bounds
 		int nbVeh,
 		bool isDurationConstraint,
 		bool verbose,
-		const AlgorithmParameters& ap);
+		const AlgorithmParameters& ap
+	);
 };
 #endif
 

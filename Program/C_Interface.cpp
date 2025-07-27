@@ -48,43 +48,60 @@ Solution *prepare_solution(Population &population, Params &params)
 
 
 extern "C" Solution *solve_cvrp(
-	int n, double *x, double *y, double *serv_time, double *dem,
-	double vehicleCapacity, double durationLimit, char isRoundingInteger, char isDurationConstraint,
-	int max_nbVeh, const AlgorithmParameters *ap, char verbose)
+    int n, double *x, double *y, double *serv_time, double *dem,
+    double vehicleCapacity, double durationLimit, char isRoundingInteger, char isDurationConstraint,
+    int max_nbVeh, const AlgorithmParameters *ap, char verbose)
 {
-	Solution *result;
+    Solution *result;
 
-	try {
-		std::vector<double> x_coords(x, x + n);
-		std::vector<double> y_coords(y, y + n);
-		std::vector<double> service_time(serv_time, serv_time + n);
-		std::vector<double> demands(dem, dem + n);
+    try {
+        std::vector<double> x_coords(x, x + n);
+        std::vector<double> y_coords(y, y + n);
+        std::vector<double> service_time(serv_time, serv_time + n);
+        std::vector<double> demands(dem, dem + n);
 
-		std::vector<std::vector<double> > distance_matrix(n, std::vector<double>(n));
-		for (int i = 0; i < n; i++)
-		{
-			for (int j = 0; j < n; j++)
-			{
-				distance_matrix[i][j] = std::sqrt(
-					(x_coords[i] - x_coords[j])*(x_coords[i] - x_coords[j])
-					+ (y_coords[i] - y_coords[j])*(y_coords[i] - y_coords[j])
-				);
-				if (isRoundingInteger)
-					distance_matrix[i][j] = std::round(distance_matrix[i][j]);
-			}
-		}
+        // Create distance matrix and time matrix (using same values for backward compatibility)
+        std::vector<std::vector<double>> distance_matrix(n, std::vector<double>(n));
+        std::vector<std::vector<double>> time_matrix(n, std::vector<double>(n));
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                distance_matrix[i][j] = std::sqrt(
+                    (x_coords[i] - x_coords[j])*(x_coords[i] - x_coords[j])
+                    + (y_coords[i] - y_coords[j])*(y_coords[i] - y_coords[j])
+                );
+                time_matrix[i][j] = distance_matrix[i][j]; // Using distance as travel time
+                if (isRoundingInteger) {
+                    distance_matrix[i][j] = std::round(distance_matrix[i][j]);
+                    time_matrix[i][j] = std::round(time_matrix[i][j]);
+                }
+            }
+        }
 
-		Params params(x_coords,y_coords,distance_matrix,service_time,demands,vehicleCapacity,durationLimit,max_nbVeh,isDurationConstraint,verbose,*ap);
+        // Create default time windows (wide open) for backward compatibility
+        std::vector<double> ready_time(n, 0.0);
+        std::vector<double> due_time(n, 1e6); // Large number to simulate no time window
 
-		// Running HGS and returning the result
-		Genetic solver(params);
-		solver.run();
-		result = prepare_solution(solver.population, params);
-	}
-	catch (const std::string &e) { std::cout << "EXCEPTION | " << e << std::endl; }
-	catch (const std::exception &e) { std::cout << "EXCEPTION | " << e.what() << std::endl; }
+        Params params(
+            x_coords, y_coords,
+            distance_matrix, time_matrix,
+            service_time, demands,
+            vehicleCapacity, durationLimit,
+            ready_time, due_time,
+            max_nbVeh,
+            isDurationConstraint,
+            verbose,
+            *ap
+        );
 
-	return result;
+        // Running HGS and returning the result
+        Genetic solver(params);
+        solver.run();
+        result = prepare_solution(solver.population, params);
+    }
+    catch (const std::string &e) { std::cout << "EXCEPTION | " << e << std::endl; }
+    catch (const std::exception &e) { std::cout << "EXCEPTION | " << e.what() << std::endl; }
+
+    return result;
 }
 
 extern "C" Solution *solve_cvrp_dist_mtx(
@@ -105,15 +122,31 @@ extern "C" Solution *solve_cvrp_dist_mtx(
 		std::vector<double> service_time(serv_time, serv_time + n);
 		std::vector<double> demands(dem, dem + n);
 
-		std::vector<std::vector<double> > distance_matrix(n, std::vector<double>(n));
-		for (int i = 0; i < n; i++) { // row
-			for (int j = 0; j < n; j++) { // column
+		std::vector<std::vector<double>> distance_matrix(n, std::vector<double>(n));
+		std::vector<std::vector<double>> time_matrix(n, std::vector<double>(n));
+		for (int i = 0; i < n; i++) {
+			for (int j = 0; j < n; j++) {
 				distance_matrix[i][j] = dist_mtx[n * i + j];
+				time_matrix[i][j] = distance_matrix[i][j]; // Using distance as travel time
 			}
 		}
 
-		Params params(x_coords,y_coords,distance_matrix,service_time,demands,vehicleCapacity,durationLimit,max_nbVeh,isDurationConstraint,verbose,*ap);
-		
+		// Create default time windows (wide open) for backward compatibility
+		std::vector<double> ready_time(n, 0.0);
+		std::vector<double> due_time(n, 1e6); // Large number to simulate no time window
+
+		Params params(
+			x_coords, y_coords,
+			distance_matrix, time_matrix,
+			service_time, demands,
+			vehicleCapacity, durationLimit,
+			ready_time, due_time,
+			max_nbVeh,
+			isDurationConstraint,
+			verbose,
+			*ap
+		);
+
 		// Running HGS and returning the result
 		Genetic solver(params);
 		solver.run();
